@@ -1,6 +1,6 @@
 # TRACE_FINDER - Finding Oracle Trace Files
 
-**Version:** 0.92
+**Version:** 0.93
 
 **Author:** Andrej Simon, Oracle CSS Germany
 

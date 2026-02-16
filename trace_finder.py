@@ -548,7 +548,7 @@ def check_hosts(hosts):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Oracle Trace Files Finder.",
                                      epilog=" => Created by Andrej Simon, Oracle CSS Germany (https://github.com/asimondev/trace_finder)")
-    parser.add_argument("-v", "--version", action="version", version="%(prog)s 0.92")
+    parser.add_argument("-v", "--version", action="version", version="%(prog)s 0.93")
     parser.add_argument("-c", "--config", help="config file path")
     parser.add_argument("-d", "--directory", help="default config directory path")
     parser.add_argument("-n", "--name", help="config file name")
