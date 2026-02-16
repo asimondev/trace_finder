@@ -1,269 +1,263 @@
-# OPATCH_DIFF – Comparing Oracle OPatch Output
+# TRACE_FINDER - Finding Oracle Trace Files
 
-Version: 0.9
+**Version:** 0.92
 
-This repository contains a Python script *opatch_diff.py* for comparing two Oracle 
-Database OPatch outputs.
+**Author:** Andrej Simon, Oracle CSS Germany
 
-Both `opatch lspatch` and `opatch lsinventory` outputs are supported. The supported OPatch output sources are:
-- A file name for already saved OPatch output.
-- ORACLE_HOME path, so that the *opatch_diff.py* can run
-`$ORACLE_HOME/OPatch/opatch` command directly   .
+**TRACE_FINDER** is a Python utility designed to search, filter, and download Oracle trace files and database alert logs across multiple nodes. It is particularly useful for consolidating diagnostic data before uploading it to Oracle Support.
 
+## Features
+
+- **Multi-Instance Support:** Easily handle RAC environments by defining multiple nodes.
+- **Time-Based Filtering:** Use --since, --until, and --interval to find files within specific windows.
+- **Pattern Matching:** Search for specific process traces (e.g., LGWR) using wildcards.
+- **Automated Downloads:** Bulk download discovered traces to a local directory.
+
+## Configuration
+
+Before using **TRACE_FINDER**, you must prepare a JSON configuration file. This file tells the script where to find the diagnostic directories for each database, host(s) and instance(s).
+
+### Configuration Attributes
+
+| Attribute | Description |
+| :--- | :--- |
+| **db_unique_name** | The `DB_UNIQUE_NAME` of the Oracle database. |
+| **instances** | A list of pairs: `["hostname", "instance_name"]`. This supports multiple nodes for RAC as well. |
+| **diag_path** | The base Oracle diagnostic path. The directory `/diag/rdbms` must exist below this path. |
+
+---
+
+### Example: Single Instance Setup
+
+If you have two separate databases on different hosts, your `test01.json` would look like this:
+
+```json
+[
+  {
+    "db_unique_name": "dba01_burg",
+    "instances": [["bol8db1", "dba01"]],
+    "diag_path": "/u01/oracle"
+  },
+  {
+    "db_unique_name": "cdba1",
+    "instances": [["bol8db2", "cdba1"]],
+    "diag_path": "/u01/oracle"
+  }
+]
+```
+
+### Example: RAC Setup
+
+For a Real Application Clusters (RAC) environment, define both nodes within the instances list:
+
+
+```json
+[
+  {
+    "db_unique_name": "dba",
+    "instances": [
+      ["bol8rac1a", "dba1"]
+      ["bol8rac1b", "dba2"]
+    ],
+    "diag_path": "/u01/app/oracle"
+  }
+]
+
+```
 ## Usage
 
 ```
-./opatch_diff.py -h
-usage: opatch_diff.py [-h] [-s] [-v] [--lspatches] [--lsinventory]
-                      [-oh ORACLE_HOME] [-oh1 ORACLE_HOME1]
-                      [-oh2 ORACLE_HOME2] [-f1 FILE1] [-f2 FILE2]
-                      [-out PATCH_OUTPUT] [-out1 PATCH_OUTPUT1]
-                      [-out2 PATCH_OUTPUT2]
-                      [first_file] [second_file]
+./trace_finder.py -h
+usage: trace_finder.py [-h] [-v] [-c CONFIG] [-d DIRECTORY] [-n NAME] [-l LAST_FILE] [-t TRACE_FILE] [--since SINCE]
+                       [--until UNTIL] [-i INTERVAL] [-a] [--download] [--download_dir DOWNLOAD_DIR] [--local]
+                       [--host HOST]
 
-Compare two Oracle OPatch inventories.
-
-positional arguments:
-  first_file            first OPatch output file
-  second_file           second OPatch output file
+Oracle Trace Files Finder.
 
 options:
   -h, --help            show this help message and exit
-  -s, --short           print less details (hide extra lines)
   -v, --version         show program's version number and exit
-  --lspatches           run 'opatch lspatches'
-  --lsinventory         run 'opatch lsinventory'
-  -oh ORACLE_HOME, --oracle_home ORACLE_HOME
-                        ORACLE_HOME directory
-  -oh1 ORACLE_HOME1, --oracle_home1 ORACLE_HOME1
-                        first ORACLE_HOME directory
-  -oh2 ORACLE_HOME2, --oracle_home2 ORACLE_HOME2
-                        second ORACLE_HOME directory
-  -f1 FILE1, --file1 FILE1
-                        first OPatch output file
-  -f2 FILE2, --file2 FILE2
-                        second OPatch output file
-  -out PATCH_OUTPUT, --patch_output PATCH_OUTPUT
-                        save OPatch output to file
-  -out1 PATCH_OUTPUT1, --patch_output1 PATCH_OUTPUT1
-                        save first OPatch output to file
-  -out2 PATCH_OUTPUT2, --patch_output2 PATCH_OUTPUT2
-                        save second OPatch output to file
-  -ru, --release_update
-                        only print Release Update version
-  --oratab              use /etc/oratab file to find ORACLE_HOME directories
-  
-=> Created by Andrej Simon, Oracle CSS Germany (https://github.com/asimondev)
+  -c CONFIG, --config CONFIG
+                        config file path
+  -d DIRECTORY, --directory DIRECTORY
+                        default config directory path
+  -n NAME, --name NAME  config file name
+  -l LAST_FILE, --last_file LAST_FILE
+                        latest trace file name
+  -t TRACE_FILE, --trace_file TRACE_FILE
+                        trace file name
+  --since SINCE         only include files with mtime >= this local time (YYYY-MM-DD HH:MM:SS)
+  --until UNTIL         only include files with mtime <= this local time (YYYY-MM-DD HH:MM:SS)
+  -i INTERVAL, --interval INTERVAL
+                        time window size: 10s, 5m, 2h, 1d (used with --since or --until)
+  -a, --alert_log       print alert log path
+  --download            download trace files
+  --download_dir DOWNLOAD_DIR
+                        download directory
+  --local               run on local machine
+  --host HOST           comma separated host names
+
+=> Created by Andrej Simon, Oracle CSS Germany (https://github.com/asimondev/trace_finder)
 ```
+
+The script uses the parameters DB_UNIQUE_NAME and instance name from the configuration file to build a path to the corresponding trace files. The script connects to remote hosts using SSH with the same user name.
+
+You can specify the configuration file by:
+- File name with *-c* / *--config* option
+- Name only and the configuration directory using *-n*/*--name* and *-d* / *--directory* options
+- Using file name and the environment variable TRACE_FINDER_CONFIG_DIR
 
 ## Examples
 
-### Comparing Two OPatch Output Files
-
-The `opatch lspatches` output was saved to files. You want to compare these 
-files to find the differences in the installed patches.
-
-```
-./opatch_diff.py opatch_lspatches_12.out opatch_lspatches_13.out
-Reading patches from 'opatch lspatches' opatch_lspatches_12.out...
-Reading patches from 'opatch lspatches' opatch_lspatches_13.out...
-
-Summary:
-  - First source  => file: opatch_lspatches_12.out contains 7 patches
-  - Second source => file: opatch_lspatches_13.out contains 9 patches
-
-Database Release Update : 19.28.0.0.250715 (37960098)
-
-Patches only in the first source:
-  No patches only in file: opatch_lspatches_12.out
-
-Patches only in the second source:
- ==> 37690446; ORA-600 [KTATMKREF-RS] ERRORS IN THE ALERT LOG POST-PATCH 37260974 (19.26.0.0.250121 DBRU)
- ==> 38764114; DIAGNOSTIC PATCH FOR BUG 38427593
+The following configuration file *~/tmp/test01.json* is used in the following examples:
+```json
+[
+  {
+    "db_unique_name": "dba01_burg",
+    "instances": [["bol8db1", "dba01"]],
+    "diag_path": "/u01/oracle"
+  },
+  {
+    "db_unique_name": "cdba1",
+    "instances": [["bol8db2", "cdba1"]],
+    "diag_path": "/u01/oracle"
+  }
+]
 ```
 
-If you only want to check for differences, use the *-s/--short* option:
+### Locating and Downloading Alert Logs
 
+You would like to see the path to the database alert log.
 ```
-./opatch_diff.py --short opatch_lspatches_12.out opatch_lspatches_13.out 
-Reading patches from 'opatch lspatches' opatch_lspatches_12.out...
-Reading patches from 'opatch lspatches' opatch_lspatches_13.out...
+oracle@bol8db2> ./trace_finder.py -c ~/tmp/test01.json -a
 
-Summary:
-  - First source  => file: opatch_lspatches_12.out contains 7 patches
-  - Second source => file: opatch_lspatches_13.out contains 9 patches
+Alert Log for DB_UNIQUE_NAME: dba01_burg
+  - Host: bol8db1; ORACLE_SID:dba01
+    => Alert Log: /u01/oracle/diag/rdbms/dba01_burg/dba01/trace/alert_dba01.log
 
-Database Release Update : 19.28.0.0.250715 (37960098)
-
-Patches only in the first source:
-  No patches only in file: opatch_lspatches_12.out
-
-Patches only in the second source:
- ==> 37690446; ORA-600 [KTATMKREF-RS] ERRORS IN THE ALERT LOG POST-PATCH 37260974 (19.26.0.0.250121 DBRU)
- ==> 38764114; DIAGNOSTIC PATCH FOR BUG 38427593
+Alert Log for DB_UNIQUE_NAME: cdba1
+  - Host: bol8db2; ORACLE_SID:cdba1
+    => Alert Log: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/alert_cdba1.log
+oracle@bol8db2> 
 ```
 
-`opatch lsinventory` provides more detailed information about patch differences. 
+You can use *--download* option to download these files to the *--download_dir* directory. The default is the current directory. 
 ```
-./opatch_diff.py opatch_lsinventory_12.out opatch_lsinventory_13.out
-Reading patches from 'opatch lsinventory' opatch_lsinventory_12.out...
-Reading patches from 'opatch lsinventory' opatch_lsinventory_13.out...
+mkdir ~/tmp/alerts
 
-Summary:
-  - First source  => file: opatch_lsinventory_12.out contains 7 patches
-  - Second source => file: opatch_lsinventory_13.out contains 9 patches
+./trace_finder.py -c ~/tmp/test01.json -a --download --download_dir ~/tmp/alerts
 
-Database Release Update : 19.28.0.0.250715 (37960098)
+Alert Log for DB_UNIQUE_NAME: dba01_burg
+  - Host: bol8db1; ORACLE_SID:dba01
+    => Alert Log: /u01/oracle/diag/rdbms/dba01_burg/dba01/trace/alert_dba01.log
 
-Patches only in the first source:
-  No patches only in file: opatch_lsinventory_12.out
+Alert Log for DB_UNIQUE_NAME: cdba1
+  - Host: bol8db2; ORACLE_SID:cdba1
+    => Alert Log: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/alert_cdba1.log
 
-Patches only in the second source:
- ==> 37690446; ORA-600 [KTATMKREF-RS] ERRORS IN THE ALERT LOG POST-PATCH 37260974 (19.26.0.0.250121 DBRU)
-   Created on 17 Jul 2025, 04:45:30 hrs PST8PDT
-   Bugs fixed:
-     37690446
-   This patch overlays patches:
-     37960098
-   This patch needs patches:
-     37960098
-   as prerequisites
-
- ==> 38764114; DIAGNOSTIC PATCH FOR BUG 38427593
-   Created on 13 Jan 2026, 22:27:00 hrs PST8PDT
-   Bugs fixed:
-     38764114
-   This patch overlays patches:
-     37960098
-   This patch needs patches:
-     37960098
-   as prerequisites
+ls -l ~/tmp/alerts/
+total 356
+-rw-r----- 1 oracle oinstall 198355  5. Nov  2024  alert_cdba1.log
+-rw-r----- 1 oracle oinstall 163408  7. Mai  2025  alert_dba01.log
 ```
 
-The *-s/--short* option reduces the output.
-```
-./opatch_diff.py opatch_lsinventory_12.out opatch_lsinventory_13.out -s
-Reading patches from 'opatch lsinventory' opatch_lsinventory_12.out...
-Reading patches from 'opatch lsinventory' opatch_lsinventory_13.out...
+### Finding the Latest Trace File
 
-Summary:
-  - First source  => file: opatch_lsinventory_12.out contains 7 patches
-  - Second source => file: opatch_lsinventory_13.out contains 9 patches
-
-Database Release Update : 19.28.0.0.250715 (37960098)
-
-Patches only in the first source:
-  No patches only in file: opatch_lsinventory_12.out
-
-Patches only in the second source:
- ==> 37690446; ORA-600 [KTATMKREF-RS] ERRORS IN THE ALERT LOG POST-PATCH 37260974 (19.26.0.0.250121 DBRU)
- ==> 38764114; DIAGNOSTIC PATCH FOR BUG 38427593
-```
-### Comparing Saved Output With Generated Output
-
-Sometimes you already have a saved OPatch output, which you want to compare with the 
-installed patches on the local ORACLE_HOME. You can generate the OPatch output on your 
-own or you can provide the ORACLE_HOME path to the tool. The tool would set the 
-environment variable ORACLE_HOME, generate the OPatch output and compare them.
+Some Oracle background process writes trace files in the trace directory. You would like to get the latest file. For instance, I would like to get the latest trace files for the LGWR processes. You can use the option *-l* / *--last_file* <PATTERN> for this task.
 
 ```
-./opatch_diff.py -oh /u01/oracle/db19a ./opatch_lspatches_01.out  --lspatches 
-Running command: /u01/oracle/db19a/OPatch/opatch lspatches
-Reading patches from 'opatch lspatches' for ORACLE_HOME: /u01/oracle/db19a...
-Reading patches from 'opatch lspatches' ./opatch_lspatches_01.out...
+./trace_finder.py -c ~/tmp/test01.json --last_file "*lgwr*trc" 
 
-Summary:
-  - First source  => ORACLE_HOME: /u01/oracle/db19a contains 3 patches
-  - Second source => file: ./opatch_lspatches_01.out contains 3 patches
+Finding last trace file for DB_UNIQUE_NAME: dba01_burg
+  - Host: bol8db1; ORACLE_SID:dba01
+    => File: /u01/oracle/diag/rdbms/dba01_burg/dba01/trace/dba01_lgwr_2018.trc
+    => Timestamp: 2025-05-07 14:28:39
 
-Database Release Update : 19.24.0.0.240716 (36582781)
+Finding last trace file for DB_UNIQUE_NAME: cdba1
+  - Host: bol8db2; ORACLE_SID:cdba1
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_lgwr_19321.trc
+    => Timestamp: 2024-11-05 19:24:34
+```
 
-Patches only in the first source:
-  No patches only in ORACLE_HOME: /u01/oracle/db19a
+The options *--download* and *--download_dir* works here as well.
+```
+ls -l ~/tmp/alerts
+total 364
+-rw-r----- 1 oracle oinstall 198355  5. Nov  2024  alert_cdba1.log
+-rw-r----- 1 oracle oinstall 163408  7. Mai  2025  alert_dba01.log
+-rw-r----- 1 oracle oinstall   1556  5. Nov  2024  cdba1_lgwr_19321.trc
+-rw-r----- 1 oracle oinstall   1519  7. Mai  2025  dba01_lgwr_2018.trc
+```
 
-Patches only in the second source:
-  No patches only in the file: ./opatch_lspatches_01.out
+### Getting Trace Files
+
+Use the option *-t* / *--trace_file* <PATTERN> to get the trace files.
+```
+./trace_finder.py -c ~/tmp/test01.json --trace_file "*ora*trc"
+Finding traces for DB_UNIQUE_NAME: dba01_burg
+  - Host: bol8db1; ORACLE_SID:dba01
+    => File: /u01/oracle/diag/rdbms/dba01_burg/dba01/trace/dba01_ora_3691.trc
+       Timestamp: 2025-05-07 14:28:49
+    => File: /u01/oracle/diag/rdbms/dba01_burg/dba01/trace/dba01_ora_2935.trc
+       Timestamp: 2025-05-07 14:26:52
+...       
+    => File: /u01/oracle/diag/rdbms/dba01_burg/dba01/trace/dba01_ora_8730.trc
+       Timestamp: 2025-05-05 21:15:53
+
+Finding traces for DB_UNIQUE_NAME: cdba1
+  - Host: bol8db2; ORACLE_SID:cdba1
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_16831.trc
+       Timestamp: 2024-11-05 18:59:55
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_16932.trc
+       Timestamp: 2024-11-05 19:00:02
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_16952.trc
+       Timestamp: 2024-11-05 19:00:46
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_16964.trc
+       Timestamp: 2024-11-05 19:00:48
+...
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19672.trc
+       Timestamp: 2024-11-05 19:24:45
 
 ```
 
-You can use the options *--lspatches* or *--lsinventory* for generating 
-the OPatch output. The default option is *--lsinventory*.
+There are too many files. You could use the options *--local* and *--host* for local or only specific hosts. This way you don't have to edit your configuration file every time.
 
-### Comparing Generated Output
-
-Sometimes you have multiple ORACLE_HOMEs and want to compare them. In 
-this case you can run the tool and provide the path to both ORACLE_HOMEs. 
+Often we need only the trace files for the specific time interval. The options *--since*, *--until* and *--interval* limits the output to the specified files.
 
 ```
-./opatch_diff.py -oh1 /u01/oracle/db19a -oh2 /u01/oracle/db19b --lspatches  
-Running command: /u01/oracle/db19a/OPatch/opatch lspatches
-Reading patches from 'opatch lspatches' for ORACLE_HOME: /u01/oracle/db19a...
-Running command: /u01/oracle/db19b/OPatch/opatch lspatches
-Reading patches from 'opatch lspatches' for ORACLE_HOME: /u01/oracle/db19b...
+oracle@bol8db2> ./trace_finder.py -c ~/tmp/test01.json --trace_file "*ora*trc" --local --since "2024-11-05 19:20:00" --until "2024-11-05 23:00:00"
 
-Summary:
-  - First source  => ORACLE_HOME: /u01/oracle/db19a contains 3 patches
-  - Second source => ORACLE_HOME: /u01/oracle/db19b contains 3 patches
+Finding traces for DB_UNIQUE_NAME: dba01_burg
+  - Host: bol8db1; ORACLE_SID:dba01
 
- ===> WARNING: Database Release Updates differ:
-  - First source  => Database Release Update : 19.24.0.0.240716 (36582781)
-  - Second source => Database Release Update : 19.26.0.0.250121 (37260974)
+Finding traces for DB_UNIQUE_NAME: cdba1
+  - Host: bol8db2; ORACLE_SID:cdba1
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_18510.trc
+       Timestamp: 2024-11-05 19:21:38
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19235.trc
+       Timestamp: 2024-11-05 19:22:28
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19184.trc
+       Timestamp: 2024-11-05 19:23:26
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19263.trc
+       Timestamp: 2024-11-05 19:23:41
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19364.trc
+       Timestamp: 2024-11-05 19:23:48
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19369.trc
+       Timestamp: 2024-11-05 19:23:48
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19672.trc
+       Timestamp: 2024-11-05 19:24:45
+oracle@bol8db2> ./trace_finder.py -c ~/tmp/test01.json --trace_file "*ora*trc" --local --since "2024-11-05 19:20:00" --interval 3m                
 
-Patches only in the first source:
- ==> 36414915; OJVM RELEASE UPDATE: 19.24.0.0.240716 (36414915)
- ==> 36582781; Database Release Update : 19.24.0.0.240716 (36582781)
+Finding traces for DB_UNIQUE_NAME: dba01_burg
+  - Host: bol8db1; ORACLE_SID:dba01
 
-Patches only in the second source:
- ==> 37102264; OJVM RELEASE UPDATE: 19.26.0.0.250121 (37102264)
- ==> 37260974; Database Release Update : 19.26.0.0.250121 (37260974)
-
+Finding traces for DB_UNIQUE_NAME: cdba1
+  - Host: bol8db2; ORACLE_SID:cdba1
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_18510.trc
+       Timestamp: 2024-11-05 19:21:38
+    => File: /u01/oracle/diag/rdbms/cdba1/cdba1/trace/cdba1_ora_19235.trc
+       Timestamp: 2024-11-05 19:22:28
+oracle@bol8db2> 
 ```
 
-### Saving OPatch Output
 
-If you already use this tool, you could also generate and save OPatch output for 
-any local ORACLE_HOME.
-
-```
-./opatch_diff.py -oh /u01/oracle/db19a -out my_patches.out --lspatches 
-Running command: /u01/oracle/db19a/OPatch/opatch lspatches
-OPatch output saved to file: my_patches.out
-Reading patches from 'opatch lspatches' for ORACLE_HOME: /u01/oracle/db19a...
-
-Database Release Update:
-  - Database Release Update : 19.24.0.0.240716 (36582781)
-
-```
-
-### Get Release Update Version
-
-Sometimes you want to know the Release Update version of the local ORACLE_HOME or
-the saved OPatch output. You can use the *-ru* or *--release_update* option.
-
-```
-./opatch_diff.py -ru local/opatch_lsinventory_12.out 
-Reading patches from 'opatch lsinventory' local/opatch_lsinventory_12.out...
-Database Release Update:
-  - Database Release Update : 19.28.0.0.250715 (37960098)
-```
-
-This option together with the *--oratab* option can be used to find the Release Update 
-versions of all local ORACLE_HOMEs from the `/etc/oratab` file.
-
-```
-./opatch_diff.py -ru --oratab
-Checking Release Update for ORACLE_HOME: /u01/oracle/db19a
-Running command: /u01/oracle/db19a/OPatch/opatch lspatches
-Reading patches from 'opatch lspatches' for ORACLE_HOME: /u01/oracle/db19a...
-Database Release Update:
-  - Database Release Update : 19.24.0.0.240716 (36582781)
-
-Checking Release Update for ORACLE_HOME: /u01/oracle/db12
-error: the directory /u01/oracle/db12 does not exist
-
-Checking Release Update for ORACLE_HOME: /u01/oracle/db19b
-Running command: /u01/oracle/db19b/OPatch/opatch lspatches
-Reading patches from 'opatch lspatches' for ORACLE_HOME: /u01/oracle/db19b...
-Database Release Update:
-  - Database Release Update : 19.26.0.0.250121 (37260974)
-```
